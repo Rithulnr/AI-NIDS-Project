@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html>
+<head>
+
+<title>Network IDS Dashboard</title>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<style>
+
+body{
+font-family:Arial;
+background:#f4f6f9;
+margin:0;
+}
+
+.sidebar{
+width:220px;
+background:#14532d;
+height:100vh;
+position:fixed;
+color:white;
+padding:20px;
+}
+
+.sidebar h2{
+margin-bottom:40px;
+}
+
+.sidebar a{
+display:block;
+color:white;
+margin:10px 0;
+text-decoration:none;
+}
+
+.content{
+margin-left:240px;
+padding:20px;
+}
+
+.row{
+display:flex;
+gap:20px;
+}
+
+.card{
+background:white;
+padding:20px;
+border-radius:8px;
+box-shadow:0 2px 8px rgba(0,0,0,0.1);
+flex:1;
+}
+
+.chart-box{
+width:180px;
+height:180px;
+margin:auto;
+}
+
+.stat{
+font-size:26px;
+font-weight:bold;
+}
+
+.alert{
+border-bottom:1px solid #eee;
+padding:6px;
+font-size:14px;
+}
+
+</style>
+
+</head>
+
+<body>
+
+<div class="sidebar">
+
+<h2>IDS Panel</h2>
+
+<a href="#">Dashboard</a>
+<a href="#">Logs</a>
+<a href="#">Settings</a>
+
+</div>
+
+<div class="content">
+
+<h2>AI Intrusion Detection Dashboard</h2>
+
+<div class="row">
+
+<div class="card">
+
+<h3>Traffic Distribution</h3>
+
+<div class="chart-box">
+<canvas id="chart"></canvas>
+</div>
+
+</div>
+
+<div class="card">
+
+<h3>Traffic Stats</h3>
+
+<p>Normal</p>
+<div class="stat" id="normal">0</div>
+
+<p>Suspicious</p>
+<div class="stat" id="suspicious">0</div>
+
+<p>Attack</p>
+<div class="stat" id="attack">0</div>
+
+</div>
+
+</div>
+
+<div class="card" style="margin-top:20px">
+
+<h3>Recent Alerts</h3>
+
+<div id="alerts"></div>
+
+</div>
+
+</div>
+
+<script>
+
+let chart;
+
+function initChart(){
+
+const ctx = document.getElementById("chart");
+
+chart = new Chart(ctx,{
+type:"doughnut",
+
+data:{
+labels:["Normal","Suspicious","Attack"],
+datasets:[{
+data:[0,0,0],
+backgroundColor:[
+"#22c55e",
+"#facc15",
+"#ef4444"
+]
+}]
+},
+
+options:{
+responsive:true,
+maintainAspectRatio:false,
+plugins:{
+legend:{position:"bottom"}
+}
+}
+
+});
+
+}
+
+async function loadStats(){
+
+let res = await fetch("/api/stats")
+let data = await res.json()
+
+document.getElementById("normal").innerText = data.normal
+document.getElementById("suspicious").innerText = data.suspicious
+document.getElementById("attack").innerText = data.attack
+
+chart.data.datasets[0].data = [
+data.normal,
+data.suspicious,
+data.attack
+]
+
+chart.update()
+
+}
+
+async function loadAlerts(){
+
+let res = await fetch("/api/alerts")
+let data = await res.json()
+
+let container = document.getElementById("alerts")
+
+container.innerHTML = ""
+
+data.forEach(a => {
+
+let div = document.createElement("div")
+
+div.className = "alert"
+
+let color = "#000"
+
+if(a.type === "ATTACK") color = "red"
+if(a.type === "SUSPICIOUS") color = "orange"
+
+div.innerHTML =
+`${a.time} — ${a.ip} — <b style="color:${color}">${a.type}</b> (${a.attack_type}) — ${a.action}`
+
+container.appendChild(div)
+
+})
+
+}
+
+initChart()
+
+setInterval(()=>{
+loadStats()
+loadAlerts()
+},2000)
+
+</script>
+
+</body>
+</html>
