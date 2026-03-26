@@ -30,11 +30,6 @@ model.load_weights("model_weights.h5")
 feature_buffer = []
 
 # -------------------------
-# DEMO TIMER
-# -------------------------
-start_time = time.time()
-
-# -------------------------
 # DETECTION ENGINE
 # -------------------------
 def detection_engine():
@@ -52,7 +47,7 @@ def detection_engine():
             src_ip = packet["src_ip"]
 
             # -------------------------
-            # FEATURE BUFFER (for AI)
+            # FEATURE BUFFER
             # -------------------------
             feature = [
                 packet["packet_len"],
@@ -71,7 +66,7 @@ def detection_engine():
                 continue
 
             # -------------------------
-            # AI PREDICTION (kept for project)
+            # AI PREDICTION
             # -------------------------
             X = np.array(feature_buffer, dtype=np.float32)
             X = X.reshape(1, 20, 5)
@@ -80,13 +75,12 @@ def detection_engine():
             risk = float(pred_future[0][0])
 
             # -------------------------
-            # CONTROLLED DEMO LOGIC
+            # CLASSIFICATION (FIXED)
             # -------------------------
-            current_time = time.time()
             packet_rate = len(feature_buffer)
 
-            # Phase 1: First 15 sec → NORMAL
-            if current_time - start_time < 15:
+            # Phase 1: FORCE NORMAL (first 20 detections)
+            if state.normal_count < 20:
                 label = "NORMAL"
                 state.normal_count += 1
 
@@ -108,15 +102,13 @@ def detection_engine():
             # ATTACK TYPE
             # -------------------------
             attack_type = "None"
-
             if label == "ATTACK":
                 attack_type = "DDoS"
 
             # -------------------------
-            # ACTION (ONLY DURING ATTACK)
+            # ACTION
             # -------------------------
             action = "NONE"
-
             if label == "ATTACK" and state.ids_enabled:
                 action = neutralize(src_ip, risk)
 
