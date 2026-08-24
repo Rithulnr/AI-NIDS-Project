@@ -1,224 +1,678 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Sentinel | SOC Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+    <!-- Leaflet for Map -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <style>
+        :root {
+            --bg-color: #0b0f19;
+            --glass-bg: rgba(20, 27, 45, 0.6);
+            --glass-border: rgba(255, 255, 255, 0.08);
+            --accent-glow: rgba(56, 189, 248, 0.3);
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --normal-color: #10b981;
+            --suspicious-color: #f59e0b;
+            --attack-color: #ef4444;
+            --sidebar-width: 260px;
+        }
 
-<title>Network IDS Dashboard</title>
+        body {
+            font-family: 'Outfit', sans-serif;
+            background: var(--bg-color);
+            background-image: 
+                radial-gradient(circle at 15% 50%, rgba(16, 185, 129, 0.05), transparent 25%),
+                radial-gradient(circle at 85% 30%, rgba(239, 68, 68, 0.05), transparent 25%);
+            margin: 0;
+            color: var(--text-main);
+            min-height: 100vh;
+            display: flex;
+            overflow: hidden;
+        }
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+        .glass {
+            background: var(--glass-bg);
+            backdrop-filter: blur(16px);
+            border: 1px solid var(--glass-border);
+            border-radius: 16px;
+        }
 
-<style>
+        /* --- Sidebar --- */
+        .sidebar {
+            width: var(--sidebar-width);
+            height: 100vh;
+            padding: 30px 20px;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            border-right: 1px solid var(--glass-border);
+            background: rgba(11, 15, 25, 0.9);
+            z-index: 100;
+        }
 
-body{
-font-family:Arial;
-background:#f4f6f9;
-margin:0;
-}
+        .brand {
+            font-size: 26px;
+            font-weight: 800;
+            background: linear-gradient(135deg, #38bdf8, #818cf8);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 30px;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
 
-.sidebar{
-width:220px;
-background:#14532d;
-height:100vh;
-position:fixed;
-color:white;
-padding:20px;
-}
+        .nav-btn {
+            color: var(--text-muted);
+            text-decoration: none;
+            font-size: 15px;
+            font-weight: 600;
+            padding: 12px 16px;
+            border-radius: 12px;
+            transition: all 0.3s ease;
+            cursor: pointer;
+            border: none;
+            background: transparent;
+            text-align: left;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            width: 100%;
+        }
 
-.sidebar h2{
-margin-bottom:40px;
-}
+        .nav-btn.active, .nav-btn:hover {
+            color: var(--text-main);
+            background: rgba(255,255,255,0.05);
+            box-shadow: inset 0 0 0 1px var(--glass-border);
+        }
 
-.sidebar a{
-display:block;
-color:white;
-margin:10px 0;
-text-decoration:none;
-}
+        .nav-btn.active {
+            background: rgba(56, 189, 248, 0.1);
+            color: #38bdf8;
+        }
 
-.content{
-margin-left:240px;
-padding:20px;
-}
+        /* --- Content Layout --- */
+        .main-content {
+            flex: 1;
+            height: 100vh;
+            overflow-y: auto;
+            padding: 40px;
+            box-sizing: border-box;
+            scroll-behavior: smooth;
+        }
 
-.row{
-display:flex;
-gap:20px;
-}
+        .tab-content {
+            display: none;
+            animation: fadeIn 0.4s ease forwards;
+        }
 
-.card{
-background:white;
-padding:20px;
-border-radius:8px;
-box-shadow:0 2px 8px rgba(0,0,0,0.1);
-flex:1;
-}
+        .tab-content.active {
+            display: block;
+        }
 
-.chart-box{
-width:180px;
-height:180px;
-margin:auto;
-}
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
 
-.stat{
-font-size:26px;
-font-weight:bold;
-}
+        .header { margin-bottom: 35px; }
+        .header h2 { font-size: 32px; margin: 0; font-weight: 700; }
+        .header p { color: var(--text-muted); margin: 5px 0 0 0; }
 
-.alert{
-border-bottom:1px solid #eee;
-padding:6px;
-font-size:14px;
-}
+        /* --- Dashboard Grid --- */
+        .grid-top {
+            display: grid;
+            grid-template-columns: 1fr 2fr;
+            gap: 25px;
+            margin-bottom: 25px;
+        }
 
-</style>
+        .card { padding: 24px; position: relative; }
+        .card h3 { margin: 0 0 20px 0; font-size: 16px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; }
 
+        /* --- Stats --- */
+        .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; }
+        .stat-box {
+            padding: 20px;
+            text-align: center;
+            background: rgba(255,255,255,0.02);
+            border-radius: 12px;
+            border: 1px solid rgba(255,255,255,0.05);
+        }
+        .stat-value { font-size: 38px; font-weight: 800; display: block; margin-top: 5px; }
+        .normal .stat-value { color: var(--normal-color); }
+        .suspicious .stat-value { color: var(--suspicious-color); }
+        .attack .stat-value { color: var(--attack-color); }
+
+        /* --- Alerts Table --- */
+        .table-header {
+            display: grid;
+            grid-template-columns: 100px 140px 120px 1fr 100px;
+            gap: 15px;
+            padding: 10px 16px;
+            color: var(--text-muted);
+            font-size: 11px;
+            text-transform: uppercase;
+            font-weight: 700;
+        }
+
+        .alert-row {
+            display: grid;
+            grid-template-columns: 100px 140px 120px 1fr 100px;
+            gap: 15px;
+            padding: 14px 16px;
+            margin-bottom: 8px;
+            background: rgba(255,255,255,0.02);
+            border-radius: 10px;
+            cursor: pointer;
+            transition: transform 0.2s, background 0.2s;
+            align-items: center;
+            font-size: 14px;
+        }
+
+        .alert-row:hover { background: rgba(255,255,255,0.05); transform: scale(1.01); }
+        .alert-row.type-ATTACK { border-left: 4px solid var(--attack-color); }
+        .alert-row.type-SUSPICIOUS { border-left: 4px solid var(--suspicious-color); }
+        .alert-row.type-NORMAL { border-left: 4px solid var(--normal-color); }
+        .alert-row.action-TARPIT { border-left: 4px solid #a855f7; }
+
+        .badge { padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 700; }
+        .badge.ATTACK { background: rgba(239, 68, 68, 0.2); color: #f87171; }
+        .badge.NORMAL { background: rgba(16, 185, 129, 0.2); color: #34d399; }
+        .badge.SUSPICIOUS { background: rgba(245, 158, 11, 0.2); color: #fbbf24; }
+
+        /* --- Map --- */
+        #map { height: 500px; width: 100%; border-radius: 16px; }
+
+        /* --- Modal --- */
+        .modal-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.8);
+            z-index: 1000;
+            display: none;
+            justify-content: center;
+            align-items: center;
+            backdrop-filter: blur(8px);
+        }
+
+        .modal {
+            width: 700px;
+            max-width: 90%;
+            padding: 30px;
+            position: relative;
+        }
+
+        .modal h2 { margin-top: 0; color: #38bdf8; }
+        .modal-close { position: absolute; top: 20px; right: 20px; cursor: pointer; color: var(--text-muted); font-size: 24px; }
+        .packet-data {
+            background: #000;
+            padding: 20px;
+            border-radius: 8px;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 13px;
+            color: #10b981;
+            overflow-x: auto;
+            white-space: pre-wrap;
+            border: 1px solid rgba(16, 185, 129, 0.3);
+            max-height: 400px;
+        }
+
+        /* --- Firewall Rules --- */
+        .rules-table { width: 100%; border-collapse: collapse; }
+        .rules-table th { text-align: left; color: var(--text-muted); padding: 12px; font-size: 12px; }
+        .rules-table td { padding: 15px 12px; border-bottom: 1px solid rgba(255,255,255,0.05); }
+        .btn-unblock {
+            background: rgba(239, 68, 68, 0.1);
+            color: #ef4444;
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            padding: 6px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+        }
+        .btn-unblock:hover { background: #ef4444; color: white; }
+
+    </style>
 </head>
-
 <body>
 
-<div class="sidebar">
+    <div class="sidebar">
+        <div class="brand">AI Sentinel</div>
+        <button class="nav-btn active" id="btn-dashboard" onclick="showTab('dashboard')">📊 Dashboard</button>
+        <button class="nav-btn" id="btn-map" onclick="showTab('map-tab')">🌍 Threat Map</button>
+        <button class="nav-btn" id="btn-firewall" onclick="showTab('firewall')">🛡️ Firewall Rules</button>
+        <button class="nav-btn" id="btn-health" onclick="showTab('health-tab')">📈 AI Health</button>
+        <button class="nav-btn" id="btn-honeypot" onclick="showTab('honeypot-tab')">🪤 Honeypot Hub</button>
+        <button class="nav-btn" id="btn-hunter" onclick="showTab('hunter-tab')">🕵️ AI Threat Hunter</button>
+        
+        <div style="margin-top: auto; padding: 20px; background: rgba(255,255,255,0.03); border-radius: 12px;">
+            <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 5px;">NETWORK STATUS</div>
+            <div style="color: var(--normal-color); font-weight: 700; display: flex; align-items: center; gap: 8px;">
+                <span style="width: 8px; height: 8px; background: var(--normal-color); border-radius: 50%;"></span>
+                SECURE
+            </div>
+        </div>
+    </div>
 
-<h2>IDS Panel</h2>
+    <div class="main-content">
+        <!-- DASHBOARD TAB -->
+        <div id="dashboard" class="tab-content active">
+            <div class="header" style="display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <h2>Security Overview</h2>
+                    <p>Real-time packet analysis & threat detection</p>
+                </div>
+                <button class="nav-btn" style="background: rgba(56, 189, 248, 0.1); border-color: #38bdf8; color: #38bdf8; padding: 8px 16px; width: auto;" onclick="window.location.href='/api/export/pcap'">📥 EXPORT PCAP</button>
+            </div>
 
-<a href="#">Dashboard</a>
-<a href="#">Logs</a>
-<a href="#">Settings</a>
+            <div class="grid-top">
+                <div class="card glass">
+                    <h3>Distribution</h3>
+                    <div style="height: 200px;"><canvas id="chart"></canvas></div>
+                </div>
+                <div class="card glass">
+                    <h3>Traffic Stats</h3>
+                    <div class="stats-grid">
+                        <div class="stat-box normal">
+                            <span style="font-size: 12px; color: var(--text-muted)">NORMAL</span>
+                            <span class="stat-value" id="count-normal">0</span>
+                        </div>
+                        <div class="stat-box suspicious">
+                            <span style="font-size: 12px; color: var(--text-muted)">SUSPICIOUS</span>
+                            <span class="stat-value" id="count-suspicious">0</span>
+                        </div>
+                        <div class="stat-box attack">
+                            <span style="font-size: 12px; color: var(--text-muted)">ATTACK</span>
+                            <span class="stat-value" id="count-attack">0</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
 
-</div>
+            <div class="card glass">
+                <h3>Recent Alerts (Click for DPI)</h3>
+                <div class="table-header">
+                    <div>TIME</div>
+                    <div>IP</div>
+                    <div>CLASS</div>
+                    <div>THREAT</div>
+                    <div>ACTION</div>
+                </div>
+                <div id="alerts-list">
+                    <div style="text-align: center; color: var(--text-muted); padding: 40px; font-style: italic;">
+                        Awaiting traffic data...
+                    </div>
+                </div>
+            </div>
+        </div>
 
-<div class="content">
+        <!-- MAP TAB -->
+        <div id="map-tab" class="tab-content">
+            <div class="header">
+                <h2>Geographical Threat Map</h2>
+                <p>Live attack origin tracking</p>
+            </div>
+            <div class="card glass" style="padding: 10px;">
+                <div id="map"></div>
+            </div>
+        </div>
 
-<h2>AI Intrusion Detection Dashboard</h2>
+        <!-- FIREWALL TAB -->
+        <div id="firewall" class="tab-content">
+            <div class="header">
+                <h2>Firewall Rule Manager</h2>
+                <p>Active Windows Firewall blocks</p>
+            </div>
+            <div class="card glass">
+                <table class="rules-table">
+                    <thead>
+                        <tr>
+                            <th>BLOCKED IP</th>
+                            <th>REASON</th>
+                            <th>STATUS</th>
+                            <th>ACTION</th>
+                        </tr>
+                    </thead>
+                    <tbody id="firewall-list">
+                        <!-- Rules injected here -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
 
-<div class="row">
+        <!-- MONITORING TAB -->
+        <div id="monitoring" class="tab-content">
+            <div class="header">
+                <h2>AI Performance Monitoring</h2>
+                <p>Dual-Head Transformer Confidence Metrics</p>
+            </div>
+            <div class="card glass">
+                <canvas id="confidenceChart" height="150"></canvas>
+            </div>
+        </div>
 
-<div class="card">
+        <div id="honeypot-tab" class="tab-content">
+            <div class="header">
+                <h2>AI Deception Hub (Honeypot)</h2>
+                <p>Monitoring shadow traffic and deceptive interactions</p>
+            </div>
+            <div class="card glass" style="text-align: center; padding: 40px; margin-bottom: 20px;">
+                <div style="font-size: 50px; margin-bottom: 20px;">🪤</div>
+                <p style="color: var(--text-muted); max-width: 600px; margin: 0 auto 20px;">
+                    This hub monitors traffic redirected to our deceptive endpoints. Attackers are fed fake data to study their techniques without risking core infrastructure.
+                </p>
+                <a href="http://127.0.0.1:5051" target="_blank" class="btn-unblock" style="display: inline-block; text-decoration: none; border-color: #38bdf8; color: #38bdf8;">VIEW ACTIVE TARPIT SERVER &rarr;</a>
+            </div>
+            <div class="card glass">
+                <h3>Active Tarpitted Threats</h3>
+                <table class="rules-table">
+                    <thead>
+                        <tr>
+                            <th>TARPITTED IP</th>
+                            <th>STATUS</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tarpit-list">
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
 
-<h3>Traffic Distribution</h3>
+        <!-- THREAT HUNTER TAB -->
+        <div id="hunter-tab" class="tab-content">
+            <div class="header">
+                <h2>🕵️ AI Threat Hunter</h2>
+                <p>Generative AI summarization and correlation of recent threats.</p>
+            </div>
+            <div class="card glass" style="margin-bottom: 20px;">
+                <h3>Trigger Analysis</h3>
+                <p style="color: var(--text-muted); font-size: 14px; margin-bottom: 20px;">
+                    Compile the latest High & Critical risk alerts and generate a human-readable intelligence report.
+                </p>
+                <button class="nav-btn" style="background: rgba(56, 189, 248, 0.1); border: 1px solid #38bdf8; color: #38bdf8; width: auto; padding: 10px 20px; display: inline-block; text-align: center;" onclick="generateThreatReport()">Generate Threat Report</button>
+            </div>
+            
+            <div class="card glass" id="hunter-report-container" style="display: none;">
+                <h3>Latest Intelligence Report</h3>
+                <div id="hunter-report-content" style="white-space: pre-wrap; line-height: 1.6; color: #10b981; font-family: 'Courier New', monospace; font-size: 14px; padding: 20px; background: rgba(0,0,0,0.4); border-radius: 8px; border: 1px solid rgba(16, 185, 129, 0.2);">
+                </div>
+            </div>
+        </div>
+    </div>
 
-<div class="chart-box">
-<canvas id="chart"></canvas>
-</div>
+    <!-- DPI MODAL -->
+    <div class="modal-overlay" id="dpi-modal">
+        <div class="modal glass">
+            <span class="modal-close" onclick="closeModal()">&times;</span>
+            <h2>Deep Packet Inspection</h2>
+            <div id="dpi-info" style="margin-bottom: 20px; color: var(--text-muted); font-size: 14px;"></div>
+            <div class="packet-data" id="packet-raw">Loading...</div>
+            <div style="margin-top: 25px; display: flex; gap: 12px; justify-content: flex-end;">
+                <button class="btn-unblock" style="border-color: #10b981; color: #10b981; background: rgba(16, 185, 129, 0.1);" onclick="submitFeedback('NORMAL')">✅ MARK AS SAFE</button>
+                <button class="nav-btn" style="background: rgba(239, 68, 68, 0.1); border-color: #ef4444; color: #ef4444; width: auto; padding: 8px 16px;" onclick="submitFeedback('ATTACK')">🎯 CONFIRM THREAT</button>
+            </div>
+        </div>
+    </div>
 
-</div>
+    <script>
+        let perfChart;
+        let map;
+        let markers = [];
 
-<div class="card">
+        function showTab(tabId) {
+            try {
+                document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+                document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+                
+                const tab = document.getElementById(tabId);
+                if(tab) tab.classList.add('active');
+                
+                const btnId = 'btn-' + tabId.replace('-tab', '');
+                const btn = document.getElementById(btnId);
+                if(btn) btn.classList.add('active');
 
-<h3>Traffic Stats</h3>
+                if(tabId === 'map-tab' && map) {
+                    setTimeout(() => map.invalidateSize(), 200);
+                }
+            } catch(e) { console.error("Tab switch error", e); }
+        }
 
-<p>Normal</p>
-<div class="stat" id="normal">0</div>
+        function initMap() {
+            try {
+                if (typeof L === 'undefined') {
+                    console.warn("Leaflet Map library not loaded yet.");
+                    return;
+                }
+                map = L.map('map', { zoomControl: false }).setView([20, 0], 2);
+                L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+                    attribution: '&copy; CartoDB'
+                }).addTo(map);
+            } catch(e) { console.error("Map init failed", e); }
+        }
 
-<p>Suspicious</p>
-<div class="stat" id="suspicious">0</div>
+        function initCharts() {
+            try {
+                const ctx = document.getElementById('chart').getContext('2d');
+                chart = new Chart(ctx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: ['Normal', 'Suspicious', 'Attack'],
+                        datasets: [{
+                            data: [0, 0, 0],
+                            backgroundColor: ['#10b981', '#f59e0b', '#ef4444'],
+                            borderWidth: 0,
+                            cutout: '80%'
+                        }]
+                    },
+                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+                });
 
-<p>Attack</p>
-<div class="stat" id="attack">0</div>
+                const ctxPerf = document.getElementById('confidenceChart').getContext('2d');
+                perfChart = new Chart(ctxPerf, {
+                    type: 'line',
+                    data: {
+                        labels: [],
+                        datasets: [{
+                            label: 'AI Confidence Score',
+                            data: [],
+                            borderColor: '#38bdf8',
+                            backgroundColor: 'rgba(56, 189, 248, 0.1)',
+                            fill: true,
+                            tension: 0.4,
+                            borderWidth: 2,
+                            pointRadius: 0
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            y: { min: 0, max: 1, grid: { color: 'rgba(255,255,255,0.05)' } },
+                            x: { display: false }
+                        },
+                        plugins: { legend: { display: false } }
+                    }
+                });
+            } catch(e) { console.error("Chart init failed", e); }
+        }
 
-</div>
+        async function updateData() {
+            try {
+                // 1. Update Stats
+                try {
+                    const statsRes = await fetch('/api/stats');
+                    const stats = await statsRes.json();
+                    document.getElementById('count-normal').innerText = stats.normal || 0;
+                    document.getElementById('count-suspicious').innerText = stats.suspicious || 0;
+                    document.getElementById('count-attack').innerText = stats.attack || 0;
+                    if(chart) {
+                        chart.data.datasets[0].data = [stats.normal, stats.suspicious, stats.attack];
+                        chart.update();
+                    }
+                } catch(e) { console.warn("Stats failed", e); }
 
-</div>
+                // 2. Update Alerts & Map
+                try {
+                    const alertRes = await fetch('/api/alerts');
+                    const alerts = await alertRes.json();
+                    const container = document.getElementById('alerts-list');
+                    
+                    if(alerts && alerts.length > 0) {
+                        container.innerHTML = '';
+                        // Clear old markers
+                        if(map) {
+                            markers.forEach(m => map.removeLayer(m));
+                            markers = [];
+                        }
 
-<div class="card" style="margin-top:20px">
+                        alerts.slice(0, 15).forEach(a => {
+                            const row = document.createElement('div');
+                            row.className = `alert-row type-${a.type}`;
+                            row.onclick = () => openDPI(a);
+                            row.innerHTML = `
+                                <div>${a.time}</div>
+                                <div style="font-family: monospace; font-weight: 700;">${a.ip}</div>
+                                <div><span class="badge ${a.type}">${a.type}</span></div>
+                                <div style="color: #fff">${a.attack_type} <span style="color: #64748b; font-size: 11px;">(Risk: ${a.risk})</span></div>
+                                <div style="font-size: 11px; font-weight: 800; color: ${a.action === 'BLOCKED' ? '#ef4444' : a.action === 'TARPIT' ? '#a855f7' : '#64748b'}">${a.action}</div>
+                            `;
+                            container.appendChild(row);
 
-<h3>Recent Alerts</h3>
+                            // Add to map
+                            if(map && a.type !== 'NORMAL') {
+                                const marker = L.circleMarker([a.lat, a.lon], {
+                                    radius: 8,
+                                    color: a.type === 'ATTACK' ? '#ef4444' : '#f59e0b',
+                                    fillColor: a.type === 'ATTACK' ? '#ef4444' : '#f59e0b',
+                                    fillOpacity: 0.6
+                                }).addTo(map);
+                                markers.push(marker);
+                            }
+                        });
+                    }
+                } catch(e) { console.warn("Alerts failed", e); }
 
-<div id="alerts"></div>
+                // 3. Update Performance Chart
+                try {
+                    const perfRes = await fetch('/api/performance');
+                    const perfData = await perfRes.json();
+                    if(perfChart && perfData.length > 0) {
+                        perfChart.data.labels = perfData.map(p => p.time);
+                        perfChart.data.datasets[0].data = perfData.map(p => p.confidence);
+                        perfChart.update('none');
+                    }
+                } catch(e) { console.warn("Perf failed", e); }
 
-</div>
+                // 4. Update Firewall and Tarpit
+                try {
+                    const ruleRes = await fetch('/api/firewall/rules');
+                    const rules = await ruleRes.json();
+                    const ruleTable = document.getElementById('firewall-list');
+                    if(ruleTable) {
+                        ruleTable.innerHTML = '';
+                        rules.forEach(ip => {
+                            ruleTable.innerHTML += `
+                                <tr>
+                                    <td style="font-family: monospace; font-weight: 700;">${ip}</td>
+                                    <td>AI Neutralization (Critical Risk)</td>
+                                    <td><span style="color: #ef4444">BLOCKED</span></td>
+                                    <td><button class="btn-unblock" onclick="unblockIP('${ip}')">UNBLOCK</button></td>
+                                </tr>
+                            `;
+                        });
+                    }
+                    
+                    const tarpitRes = await fetch('/api/tarpit/rules');
+                    const tarpitRules = await tarpitRes.json();
+                    const tarpitTable = document.getElementById('tarpit-list');
+                    if(tarpitTable) {
+                        tarpitTable.innerHTML = '';
+                        tarpitRules.forEach(ip => {
+                            tarpitTable.innerHTML += `
+                                <tr>
+                                    <td style="font-family: monospace; font-weight: 700;">${ip}</td>
+                                    <td><span style="color: #a855f7; font-weight: 800;">TARPITTED (AI Deception Active)</span></td>
+                                </tr>
+                            `;
+                        });
+                    }
+                } catch(e) { console.warn("Firewall/Tarpit failed", e); }
 
-</div>
+            } catch (e) { console.error("Update Master Error", e); }
+        }
 
-<script>
+        function openDPI(alert) {
+            document.getElementById('dpi-modal').style.display = 'flex';
+            document.getElementById('dpi-info').innerHTML = `IP: <b>${alert.ip}</b> | Time: <b>${alert.time}</b> | Classification: <b>${alert.type}</b>`;
+            document.getElementById('packet-raw').innerText = alert.raw || "No raw data available.";
+        }
 
-let chart;
+        function closeModal() {
+            document.getElementById('dpi-modal').style.display = 'none';
+        }
 
-function initChart(){
+        async function generateThreatReport() {
+            const container = document.getElementById('hunter-report-container');
+            const content = document.getElementById('hunter-report-content');
+            container.style.display = 'block';
+            content.innerHTML = "Gathering intelligence and generating report...\n(This may take a moment)";
+            
+            try {
+                const response = await fetch('/api/hunter/report');
+                const data = await response.json();
+                
+                let text = data.report || "No report generated.";
+                // Typing effect
+                content.innerHTML = "";
+                let i = 0;
+                let timer = setInterval(() => {
+                    content.innerHTML += text.charAt(i);
+                    i++;
+                    if(i >= text.length) clearInterval(timer);
+                }, 20);
+            } catch(e) {
+                content.innerHTML = "Failed to generate report: " + e;
+            }
+        }
 
-const ctx = document.getElementById("chart");
+        async function unblockIP(ip) {
+            await fetch(`/api/firewall/unblock/${ip}`);
+            updateData();
+        }
 
-chart = new Chart(ctx,{
-type:"doughnut",
+        async function submitFeedback(label) {
+            const info = document.getElementById('dpi-info').innerText;
+            const ip = info.split('|')[0].replace('IP: ', '').trim();
+            
+            const response = await fetch('/api/feedback', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    ip: ip,
+                    correct_label: label,
+                    timestamp: new Date().toISOString()
+                })
+            });
+            
+            if(response.ok) {
+                alert(`AI Brain Updated: Marked IP ${ip} as ${label}`);
+                closeModal();
+            }
+        }
 
-data:{
-labels:["Normal","Suspicious","Attack"],
-datasets:[{
-data:[0,0,0],
-backgroundColor:[
-"#22c55e",
-"#facc15",
-"#ef4444"
-]
-}]
-},
-
-options:{
-responsive:true,
-maintainAspectRatio:false,
-plugins:{
-legend:{position:"bottom"}
-}
-}
-
-});
-
-}
-
-async function loadStats(){
-
-let res = await fetch("/api/stats")
-let data = await res.json()
-
-document.getElementById("normal").innerText = data.normal
-document.getElementById("suspicious").innerText = data.suspicious
-document.getElementById("attack").innerText = data.attack
-
-chart.data.datasets[0].data = [
-data.normal,
-data.suspicious,
-data.attack
-]
-
-chart.update()
-
-}
-
-async function loadAlerts(){
-
-let res = await fetch("/api/alerts")
-let data = await res.json()
-
-let container = document.getElementById("alerts")
-
-container.innerHTML = ""
-
-data.forEach(a => {
-
-let div = document.createElement("div")
-
-div.className = "alert"
-
-let color = "#000"
-
-if(a.type === "ATTACK") color = "red"
-if(a.type === "SUSPICIOUS") color = "orange"
-
-div.innerHTML =
-`${a.time} — ${a.ip} — <b style="color:${color}">${a.type}</b> (${a.attack_type}) — ${a.action}`
-
-container.appendChild(div)
-
-})
-
-}
-
-initChart()
-
-setInterval(()=>{
-loadStats()
-loadAlerts()
-},2000)
-
-</script>
-
+        initCharts();
+        initMap();
+        setInterval(updateData, 2000);
+        updateData();
+    </script>
 </body>
 </html>

@@ -1,5 +1,37 @@
-venv/
+# Python
 __pycache__/
 *.pyc
-*.h5
+
+# Virtual environment
+venv/
+env/
+
+# IDE
 .vscode/
+.idea/
+
+# Databases / runtime
+*.db
+*.log
+
+# Large datasets
+X.npy
+y.npy
+
+# Model checkpoints / weights
+model_weights.h5
+model_weights.weights.h5
+model_weights.data-00000-of-00001
+model_weights.index
+checkpoint
+
+# Generated ML artifacts
+scaler.pkl
+q_table.json
+
+# Development folders
+scratch/
+artifacts/
+
+# Temporary files
+*.tmp

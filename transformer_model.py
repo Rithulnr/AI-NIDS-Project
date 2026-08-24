@@ -29,8 +29,8 @@ def build_transformer(seq_len, num_features):
 
     # ===== Dual Heads =====
     current_attack = layers.Dense(
-        1,
-        activation="sigmoid",
+        10,
+        activation="softmax",
         name="current_attack"
     )(x)
 
@@ -50,7 +50,7 @@ def build_transformer(seq_len, num_features):
     model.compile(
         optimizer="adam",
         loss={
-            "current_attack": "binary_crossentropy",
+            "current_attack": "sparse_categorical_crossentropy",
             "future_risk": "binary_crossentropy"
         },
         loss_weights={
